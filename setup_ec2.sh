@@ -1,4 +1,9 @@
-#!/bin/sh
+#!/bin/bash
 apt-get update
 apt-get install python3.6 -y
-alias python=python3
+
+# add alias for python to bashrc
+echo 'alias python=python3' >> ~/.bashrc
+source ~/.bashrc
+
+apt-get install unzip
