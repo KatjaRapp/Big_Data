@@ -11,4 +11,4 @@ apt-get install unzip -y
 mkdir -p /home/ubuntu/data
 python3 ./google_drive.py "16N-AWvkcvhtQbLT7irpvSHSozJtyvGel" /home/ubuntu/data/stocks.zip
 unzip /home/ubuntu/data/stocks.zip -d /home/ubuntu/data
-chmod 666 /home/ubuntu/data
+chmod 777 /home/ubuntu/data
