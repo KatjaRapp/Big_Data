@@ -5,7 +5,7 @@ from pandas import Series
 from sklearn import preprocessing
 from  pandas  import  DataFrame 
 from  pandas  import  concat 
-%matplotlib inline
+#%matplotlib inline
 import datetime
 from datetime import timedelta, date
 from sklearn import svm
@@ -21,7 +21,7 @@ from sklearn.ensemble import RandomForestClassifier
 seed = 7
 np.random.seed(seed)
 
-df_ticker = pd.read_csv("data/stocks/AAPL.csv")
+df_ticker = pd.read_csv("~/data/stocks/AAPL.csv")
 df_ticker.columns = ['Date','Open','Close','Low','High','Volume']
 df_ticker.head()
 
@@ -113,7 +113,7 @@ merged_df = pd.merge(df_for_volumes,df_for_midprices,on='Date')
 merged_df.tail()
 
 # 4 Add dependend variable
-df_train_label = pd.read_csv('data/labels_train.csv', header=0, index_col=0)
+df_train_label = pd.read_csv('~/data/stocks/labels_train.csv', header=0, index_col=0)
 df_train_label.head()
 
 df_train_label = df_train_label.loc[:, df_train_label.columns.intersection(['AAPL'])]
