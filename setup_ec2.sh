@@ -19,3 +19,10 @@ mkdir -p /home/ubuntu/data
 python3 ./google_drive.py "16N-AWvkcvhtQbLT7irpvSHSozJtyvGel" /home/ubuntu/data/stocks.zip
 unzip /home/ubuntu/data/stocks.zip -d /home/ubuntu/data
 chmod -R 777 /home/ubuntu/data
+
+# set up git
+git config --global user.name "Katja Rapp"
+git config --global user.email rapp.katja@googlemail.com
+
+# execute python script
+python3 ~/Big_Data/kaggle_predictions.py
