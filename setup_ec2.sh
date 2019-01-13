@@ -6,8 +6,8 @@ apt-get install python3.6 -y
 echo 'alias python=python3' >> /home/ubuntu/.bashrc
 source /home/ubuntu/.bashrc
 
-apt-get install unzip
+apt-get install unzip -y
 
 mkdir -p /home/ubuntu/data
-python ./google_drive.py "16N-AWvkcvhtQbLT7irpvSHSozJtyvGel" /home/ubuntu/data/stocks.zip
+python3 ./google_drive.py "16N-AWvkcvhtQbLT7irpvSHSozJtyvGel" /home/ubuntu/data/stocks.zip
 unzip /home/ubuntu/data/stocks.zip
