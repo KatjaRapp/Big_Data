@@ -20,7 +20,6 @@ Content-Disposition: attachment; filename="userdata.txt"
 #!/bin/bash
 cd /home/ubuntu
 git clone https://github.com/KatjaRapp/Big_Data.git
-chmod 777 /home/ubuntu/Big_Data
-chmod 777 /home/ubuntu/Big_Data/setup_ec2.sh
+chmod -R 777 /home/ubuntu/Big_Data
 /home/ubuntu/Big_Data/setup_ec2.sh
 --//
