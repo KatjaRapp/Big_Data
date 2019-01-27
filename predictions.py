@@ -18,6 +18,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
 import csv
 import time
 import multiprocessing as mp
@@ -248,9 +249,11 @@ boersen_days_2017 = [
 all_boersen_days = boersen_days_2017
 all_boersen_days.extend(boersen_days_2018)
 
-features_time_range = [0]
-# features_time_range = [i*10 for i in range(10)]
+# features_time_range = [0, 1, 2, 3, 4, 5, 6, 7]
+features_time_range = [i*10 for i in range(10)]
 features_used = ['Open', 'Close', 'Low', 'High', 'Volume']
+
+# features_used = ['Open', 'Volume']
 
 seed = 7
 np.random.seed(seed)
@@ -459,17 +462,18 @@ def train():
 
     x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.7, test_size=0.3, random_state=42)
 
-    # 6 Random Forest
-    print("Starting Training of RandomForestClassifier")
+    # Train Classifier
+    print("Starting Training of KNeighborsClassifier")
     print()
-    rf_class = RandomForestClassifier(n_estimators=100, random_state=42)
+    # classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+    classifier = KNeighborsClassifier(n_neighbors=5)
 
-    rf_class.fit(x_train, y_train)
+    classifier.fit(x_train, y_train)
 
-    rf_score = rf_class.score(x_test, y_test)
-    print("Random Forest Score: " + ": " + str(rf_score))
+    rf_score = classifier.score(x_test, y_test)
+    print("KNeighborsClassifier Score: " + ": " + str(rf_score))
 
-    return rf_class
+    return classifier
 
 def classify_2018(classifier):
     result_str_lst = list()
