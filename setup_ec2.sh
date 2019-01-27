@@ -25,4 +25,4 @@ git config --global user.name "Katja Rapp"
 git config --global user.email rapp.katja@googlemail.com
 
 # execute python script
-python3 ~/Big_Data/kaggle_predictions.py
+python3 ~/Big_Data/predictions.py
