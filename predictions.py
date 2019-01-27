@@ -20,6 +20,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 import csv
 import time
+import multiprocessing as mp
 
 # GLOBALS
 
@@ -247,8 +248,8 @@ boersen_days_2017 = [
 all_boersen_days = boersen_days_2017
 all_boersen_days.extend(boersen_days_2018)
 
-# features_time_range = [0]
-features_time_range = [i*10 for i in range(10)]
+features_time_range = [0]
+# features_time_range = [i*10 for i in range(10)]
 features_used = ['Open', 'Close', 'Low', 'High', 'Volume']
 
 seed = 7
@@ -356,52 +357,88 @@ def getTickerTimeseriesDf(df_ticker):
             stock_merged_df = pd.merge(stock_merged_df, feature_df, on='Date')
     return stock_merged_df
 
-def train():
-    # load training labels
-    df_train_label = pd.read_csv(join(dir_path, 'labels_train.csv'), header=0, index_col=0)
+def getTickerTimeseries_GT_Df(file_name, df_train_label):
+    ticker_name = file_name.replace(".csv", "")
 
+    print("Loading: " + file_name)
+
+    # Load data frame
+    file_str = join(ticker_path, file_name)
+    df_ticker = pd.read_csv(file_str)
+    df_ticker.columns = ['Date', 'Open', 'Close', 'Low', 'High', 'Volume']
+
+    # if ticker is not valid, then write all zeros in the output file
+    ticker_data_valid = hasTickerAllDates(df_ticker)
+    if not ticker_data_valid:
+        return None
+
+    stock_merged_df = getTickerTimeseriesDf(df_ticker)
+
+    stock_merged_df = stock_merged_df.dropna(axis = 0)
+    stock_merged_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
+
+    # Add dependend variable
+    labels_df = df_train_label.loc[:, df_train_label.columns.intersection([ticker_name])]
+    labels_df = labels_df.rename(index=str, columns={ticker_name: 'Y'})
+    stock_complete_df = pd.merge(stock_merged_df, labels_df[['Y']], on='Date')
+    stock_complete_df = stock_complete_df.sort_values('Date')
+
+    return stock_complete_df
+
+def getAllTickerTimeseries_GT_Df_serial(ticker_file_names, df_train_label):
     all_stocks_df = DataFrame()
+
     first_stock_b = True
     file_ctr = 0
     num_files = len(ticker_file_names)
-
-    start_time = time.time()
 
     for file_name in ticker_file_names:
 
         ticker_name = file_name.replace(".csv", "")
 
         file_ctr += 1
-        print("Loading " + str(file_ctr) + "/" + str(num_files) + ": " + ticker_name)
+        # print("Loading " + str(file_ctr) + "/" + str(num_files) + ": " + ticker_name)
 
-        # 1 Load data frame
-        file_str = join(ticker_path, file_name)
-        df_ticker = pd.read_csv(file_str)
-        df_ticker.columns = ['Date', 'Open', 'Close', 'Low', 'High', 'Volume']
+        stock_complete_df = getTickerTimeseries_GT_Df(file_name, df_train_label)
 
-        # if ticker is not valid, then write all zeros in the output file
-        ticker_data_valid = hasTickerAllDates(df_ticker)
-        if not ticker_data_valid:
-            print(ticker_name + " not complete")
-            continue
-
-        stock_merged_df = getTickerTimeseriesDf(df_ticker)
-
-        stock_merged_df = stock_merged_df.dropna(axis = 0)
-        stock_merged_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
-
-        # 4 Add dependend variable
-        labels_df = df_train_label.loc[:, df_train_label.columns.intersection([ticker_name])]
-        labels_df = labels_df.rename(index=str, columns={ticker_name: 'Y'})
-        stock_complete_df = pd.merge(stock_merged_df, labels_df[['Y']], on='Date')
-        stock_complete_df = stock_complete_df.sort_values('Date')
-
-        if first_stock_b:
-            all_stocks_df = stock_complete_df
-            first_stock_b = False
+        if stock_complete_df is not None:
+            if first_stock_b:
+                all_stocks_df = stock_complete_df
+                first_stock_b = False
+            else:
+                all_stocks_df = all_stocks_df.append(stock_complete_df, ignore_index=True)
+                all_stocks_df = all_stocks_df.sort_values('Date')
         else:
-            all_stocks_df = all_stocks_df.append(stock_complete_df, ignore_index=True)
-            all_stocks_df = all_stocks_df.sort_values('Date')
+            print(ticker_name + " not complete")
+    return all_stocks_df
+
+def getAllTickerTimeseries_GT_Df_multiprocess(ticker_file_names, df_train_label):
+    pool = mp.Pool(processes=mp.cpu_count())
+
+    res = [pool.apply(getTickerTimeseries_GT_Df, args=(file_name, df_train_label)) for file_name in ticker_file_names]
+
+    all_tickers_df = DataFrame()
+    first_stock_b = True
+
+    for ticker_df in res:
+        if ticker_df is not None:
+                if first_stock_b:
+                    all_tickers_df = ticker_df
+                    first_stock_b = False
+                else:
+                    all_tickers_df = all_tickers_df.append(ticker_df, ignore_index=True)
+                    all_tickers_df = all_tickers_df.sort_values('Date')
+
+    return all_tickers_df
+
+def train():
+    # load training labels
+    df_train_label = pd.read_csv(join(dir_path, 'labels_train.csv'), header=0, index_col=0)
+
+    start_time = time.time()
+
+    all_stocks_df = getAllTickerTimeseries_GT_Df_serial(ticker_file_names, df_train_label)
+    # all_stocks_df = getAllTickerTimeseries_GT_Df_multiprocess(ticker_file_names, df_train_label)
 
     end_time = time.time()
     elapsed_time = end_time - start_time
@@ -430,7 +467,7 @@ def train():
     rf_class.fit(x_train, y_train)
 
     rf_score = rf_class.score(x_test, y_test)
-    print("Random Forest Score: " + ticker_name + ": " + str(rf_score))
+    print("Random Forest Score: " + ": " + str(rf_score))
 
     return rf_class
 
