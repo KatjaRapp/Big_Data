@@ -19,6 +19,9 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 import csv
+import time
+
+# GLOBALS
 
 boersen_days_2018 = [
     "2018-01-02",
@@ -244,8 +247,21 @@ boersen_days_2017 = [
 all_boersen_days = boersen_days_2017
 all_boersen_days.extend(boersen_days_2018)
 
-features_time_range = [0]#[i*10 for i in range(11)]
-features_used = ['Open', 'Close', 'Low', 'High'] # 'Volume'
+# features_time_range = [0]
+features_time_range = [i*10 for i in range(10)]
+features_used = ['Open', 'Close', 'Low', 'High', 'Volume']
+
+seed = 7
+np.random.seed(seed)
+
+dir_path = "D:/Dev/Big_Data/data"
+dir_path = normpath(dir_path)
+
+# ticker file names
+ticker_path = join(dir_path, "stocks")
+ticker_file_names = [f for f in listdir(ticker_path) if (isfile(join(ticker_path, f)) and ".csv" in f)]
+
+# FUNCTIONS
 
 def series_to_supervised(feature_name, data, time_range=[0], dropnan=True):
     df = DataFrame(data)
@@ -279,77 +295,97 @@ def daterange(start_date_str, end_date_str):
         dates.append(start_date + timedelta(n))
     return dates
 
-def main():
+def hasTickerAllDates(ticker_df):
+    res = True
+    for date_str in all_boersen_days:
+        if not date_str in ticker_df['Date'].values:
+            res = False
+            continue
+    return res
 
-    seed = 7
-    np.random.seed(seed)
+def getFeatureTimeseriesDf(feature, feature_df):
+    timeseries_feature_df = series_to_supervised(feature, feature_df[feature].values, features_time_range)
 
-    result_str_lst = list()
+    feature_ = feature + "_"
 
-    dir_path = "/home/ubuntu/data"
-    dir_path = normpath(dir_path)
+    for t in features_time_range:
+        if not t == features_time_range[0]:
+            f_0 = timeseries_feature_df[feature_ + str(features_time_range[0])]
+            f_t = timeseries_feature_df[feature_ + str(t)]
+            f_t = f_t - f_0
+            feature_df[feature_ + str(t)] = f_t
+    if len(features_time_range) > 1:
+        feature_df = feature_df.drop([feature], axis=1)
+    return feature_df
 
-    # load ticker file names
-    ticker_path = join(dir_path, "stocks")
-    ticker_file_names = [f for f in listdir(ticker_path) if (isfile(join(ticker_path, f)) and ".csv" in f)]
+def normalizeFeatureDf(feature_df):
+    tmp_df = feature_df.copy(deep=True)
+    tmp_df = tmp_df.drop(["Date"], axis=1)
+    scaler = MinMaxScaler(feature_range=(-1, 1), copy=False)
+    scaler.fit_transform(tmp_df.values)
+    tmp_df["Date"] = feature_df["Date"].values
+    feature_df = tmp_df
 
+    # move the "Date" column to the front of the dataframe
+    cols = list(feature_df)
+    cols.insert(0, cols.pop(cols.index('Date')))
+    feature_df = feature_df.loc[:, cols]
+    return feature_df
+
+def getTickerTimeseriesDf(df_ticker):
+    stock_merged_df = DataFrame()
+    first_feature_b = True
+
+    for feature in features_used:
+        feature_df = df_ticker.copy(deep=True)
+        # drop everything except of the current feature and the date
+        feature_df = feature_df[["Date", feature]]
+
+        feature_df = getFeatureTimeseriesDf(feature, feature_df)
+
+        feature_df = normalizeFeatureDf(feature_df)
+
+        feature_df = feature_df.dropna(axis = 0)
+        feature_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
+
+        # merge current dataframe into overall dataframe
+        if first_feature_b:
+            stock_merged_df = feature_df
+            first_feature_b = False
+        else:
+            stock_merged_df = pd.merge(stock_merged_df, feature_df, on='Date')
+    return stock_merged_df
+
+def train():
     # load training labels
     df_train_label = pd.read_csv(join(dir_path, 'labels_train.csv'), header=0, index_col=0)
 
     all_stocks_df = DataFrame()
     first_stock_b = True
+    file_ctr = 0
+    num_files = len(ticker_file_names)
+
+    start_time = time.time()
 
     for file_name in ticker_file_names:
 
         ticker_name = file_name.replace(".csv", "")
+
+        file_ctr += 1
+        print("Loading " + str(file_ctr) + "/" + str(num_files) + ": " + ticker_name)
 
         # 1 Load data frame
         file_str = join(ticker_path, file_name)
         df_ticker = pd.read_csv(file_str)
         df_ticker.columns = ['Date', 'Open', 'Close', 'Low', 'High', 'Volume']
 
-        ticker_data_valid = True
-        for date_str in all_boersen_days:
-            if not date_str in df_ticker['Date'].values:
-                ticker_data_valid = False
-                continue
-
         # if ticker is not valid, then write all zeros in the output file
+        ticker_data_valid = hasTickerAllDates(df_ticker)
         if not ticker_data_valid:
-            for date_str in boersen_days_2018:
-                result_str_lst.append([date_str + ":" + ticker_name, 0])
             print(ticker_name + " not complete")
             continue
 
-
-        stock_merged_df = DataFrame()
-        first_feature_b = True
-
-        for feature in features_used:
-            feature_ = feature + "_"
-
-            feature_df = df_ticker.copy(deep=True)
-            # drop everything except of the current feature and the date
-            feature_df = feature_df[["Date", feature]]
-
-            timeseries_feature_df = series_to_supervised(feature, feature_df[feature].values, features_time_range)
-
-            for t in features_time_range:
-                if not t == features_time_range[0]:
-                    f_0 = timeseries_feature_df[feature_ + str(features_time_range[0])]
-                    f_t = timeseries_feature_df[feature_ + str(t)]
-                    f_t = (f_t - f_0) / f_0
-                    feature_df[feature_ + str(t)] = f_t
-            feature_df = feature_df.drop([feature], axis=1)
-
-            feature_df = feature_df.dropna(axis = 0)
-            feature_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
-
-            if first_feature_b:
-                stock_merged_df = feature_df
-                first_feature_b = False
-            else:
-                stock_merged_df = pd.merge(stock_merged_df, feature_df, on='Date')
+        stock_merged_df = getTickerTimeseriesDf(df_ticker)
 
         stock_merged_df = stock_merged_df.dropna(axis = 0)
         stock_merged_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
@@ -367,37 +403,28 @@ def main():
             all_stocks_df = all_stocks_df.append(stock_complete_df, ignore_index=True)
             all_stocks_df = all_stocks_df.sort_values('Date')
 
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print('Ladedauer: ' + "{0:.2f}".format(elapsed_time) + ' s', end='\n')
+    print()
 
     all_stocks_df = all_stocks_df.dropna(axis = 0)
     all_stocks_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
 
-    column_names = list(all_stocks_df)
-    column_names.remove("Date")
-    column_names.remove("Y")
-    print(column_names)
+    cols_x = list(all_stocks_df)
+    cols_x.remove("Date")
+    cols_x.remove("Y")
 
-
-    # column_names = ['Open_10', 'Open_20', 'Open_30', 'Open_40', 'Open_50', 'Open_60', 'Open_70', 'Open_80', 'Open_90', 'Open_100',
-    # 'Close_10', 'Close_20', 'Close_30', 'Close_40', 'Close_50', 'Close_60', 'Close_70', 'Close_80', 'Close_90',
-    # 'Close_100', 'Low_10', 'Low_20', 'Low_30', 'Low_40', 'Low_50', 'Low_60', 'Low_70', 'Low_80', 'Low_90', 'Low_100',
-    # 'High_10', 'High_20', 'High_30', 'High_40', 'High_50', 'High_60', 'High_70', 'High_80', 'High_90', 'High_100',
-    # 'Volume_20', 'Volume_30', 'Volume_40', 'Volume_50']#, 'Volume_60', 'Volume_70', 'Volume_80', 'Volume_90',
-    # # 'Volume_100']
-
-    # # 'Volume_10'
-
-    x = all_stocks_df[column_names]
-
-    print(x.head())
-
+    x = all_stocks_df[cols_x]
     y = all_stocks_df["Y"]
-    print(y.head())
 
     # all_stocks_df = all_stocks_df.to_csv('kaggle_Rapp_Katja.csv', index=False)
 
     x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.7, test_size=0.3, random_state=42)
 
     # 6 Random Forest
+    print("Starting Training of RandomForestClassifier")
+    print()
     rf_class = RandomForestClassifier(n_estimators=100, random_state=42)
 
     rf_class.fit(x_train, y_train)
@@ -405,69 +432,97 @@ def main():
     rf_score = rf_class.score(x_test, y_test)
     print("Random Forest Score: " + ticker_name + ": " + str(rf_score))
 
-    #     # 7 Prediction for Kaggle
-    #     # prediction = rf_class.predict(x_test)
-    #     # prediction
+    return rf_class
 
-    #     # merged_df.loc[merged_df['Date'] == '2018-01-02']
+def classify_2018(classifier):
+    result_str_lst = list()
 
-    #     # x = merged_df.loc[merged_df['Date'] == '2018-06-11']
-    #     # x = x.drop(['Date'], axis=1)
-    #     # prediction = rf_class.predict(x)
-    #     # prediction
+    for file_name in ticker_file_names:
 
-    #     # res = predictForDate('2018-06-11', merged_df, rf_class)
-    #     # print(res)
+        ticker_name = file_name.replace(".csv", "")
+        print("Predicting " + ticker_name)
 
-    #     # date_list = daterange('2018-01-02', '2018-06-30')
+        # 1 Load data frame
+        file_str = join(ticker_path, file_name)
+        df_ticker = pd.read_csv(file_str)
+        df_ticker.columns = ['Date', 'Open', 'Close', 'Low', 'High', 'Volume']
 
-    #     selected_dates_df = DataFrame()
-    #     selected_dates = list()
-    #     default_dates = list()
+        ticker_data_valid = hasTickerAllDates(df_ticker)
 
-    #     for date in boersen_days_2018:
-    #         x = merged_df.loc[merged_df['Date'] == date]
-    #         if not x.empty:
-    #             selected_dates_df = selected_dates_df.append(x)
-    #             selected_dates.append(date)
-    #         else:
-    #             default_dates.append(date)
+        # if ticker is not valid, then write all zeros in the output file
+        if not ticker_data_valid:
+            for date_str in boersen_days_2018:
+                result_str_lst.append([date_str + ":" + ticker_name, 0])
+            print(ticker_name + " defaults to 0")
+            continue
 
+        ticker_ts_df = getTickerTimeseriesDf(df_ticker)
 
-    #     selected_dates_df = selected_dates_df.drop(['Date'], axis=1)
-    #     selected_dates_df.head()
-
-    #     prediction = rf_class.predict(selected_dates_df)
-
-    #     for i in range(len(prediction) + len(default_dates)):
-    #         if len(selected_dates) > 0:
-    #             min_pred = min(selected_dates)
-    #         else:
-    #             min_pred = '9999-99-99'
-    #         if len(default_dates) > 0:
-    #             min_default = min(default_dates)
-    #         else:
-    #             min_default = '9999-99-99'
-
-    #         if min_pred < min_default:
-    #             min_pred_idx = selected_dates.index(min_pred)
-    #             result_str_lst.append(
-    #                 [min_pred + ":" + ticker_name, prediction[min_pred_idx]])
-    #             del selected_dates[min_pred_idx]
-    #             prediction = np.delete(prediction, min_pred_idx)
-    #         else:
-    #             min_default_idx = default_dates.index(min_default)
-    #             result_str_lst.append(
-    #                 [min_default + ":" + ticker_name, 0])
-    #             del default_dates[min_default_idx]
+        ticker_ts_df = ticker_ts_df.dropna(axis = 0)
+        ticker_ts_df.replace([np.inf, -np.inf], np.nan).dropna(axis=0, inplace=True)
 
 
+        selected_dates_df = DataFrame()
+        selected_dates = list()
+        default_dates = list()
 
-    # # Transfer list to DataFrame and save
-    # kaggle = pd.DataFrame(data=result_str_lst, columns=['Id', 'Category'])
-    # kaggle.shape
+        for date in boersen_days_2018:
+            x = ticker_ts_df.loc[ticker_ts_df['Date'] == date]
+            if not x.empty:
+                selected_dates_df = selected_dates_df.append(x)
+                selected_dates.append(date)
+            else:
+                default_dates.append(date)
 
-    # kaggle = kaggle.to_csv('kaggle_Rapp_Katja.csv', index=False)
+        selected_dates_df = selected_dates_df.drop(['Date'], axis=1)
+
+        prediction = classifier.predict(selected_dates_df)
+
+        for _ in range(len(prediction) + len(default_dates)):
+            if len(selected_dates) > 0:
+                min_pred = min(selected_dates)
+            else:
+                min_pred = '9999-99-99'
+            if len(default_dates) > 0:
+                min_default = min(default_dates)
+            else:
+                min_default = '9999-99-99'
+
+            if min_pred < min_default:
+                min_pred_idx = selected_dates.index(min_pred)
+                result_str_lst.append(
+                    [min_pred + ":" + ticker_name, prediction[min_pred_idx]])
+                del selected_dates[min_pred_idx]
+                prediction = np.delete(prediction, min_pred_idx)
+            else:
+                min_default_idx = default_dates.index(min_default)
+                result_str_lst.append(
+                    [min_default + ":" + ticker_name, 0])
+                del default_dates[min_default_idx]
+    return result_str_lst
+
+def main():
+    print("Using features: ")
+    print(*features_used, sep = ", ")
+    print()
+
+    start_time = time.time()
+    rf_class = train()
+    end_time = time.time()
+    elapsed_time = end_time -  start_time
+    print()
+    print('Trainingsdauer: ' + "{0:.2f}".format(elapsed_time) + ' s', end='\n')
+    print()
+
+    result_str_lst = classify_2018(rf_class)
+
+    # Transfer list to DataFrame and save
+    kaggle = pd.DataFrame(data=result_str_lst, columns=['Id', 'Category'])
+    kaggle.shape
+
+    kaggle = kaggle.to_csv('kaggle_Rapp_Katja.csv', index=False)
+    print()
+    print("Done writing output file.")
 
 if __name__ == "__main__":
     main()
