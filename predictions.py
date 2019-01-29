@@ -19,9 +19,11 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import classification_report
 import csv
 import time
 import multiprocessing as mp
+# import random
 
 # GLOBALS
 
@@ -395,6 +397,9 @@ def getAllTickerTimeseries_GT_Df_serial(ticker_file_names, df_train_label):
     file_ctr = 0
     num_files = len(ticker_file_names)
 
+    # num_samples = 50
+    # ticker_file_names = [ticker_file_names[i] for i in np.random.randint(0, len(ticker_file_names), num_samples)]
+
     for file_name in ticker_file_names:
 
         ticker_name = file_name.replace(".csv", "")
@@ -434,7 +439,7 @@ def getAllTickerTimeseries_GT_Df_multiprocess(ticker_file_names, df_train_label)
 
     return all_tickers_df
 
-def train():
+def prepareTrainingData():
     # load training labels
     df_train_label = pd.read_csv(join(dir_path, 'labels_train.csv'), header=0, index_col=0)
 
@@ -458,20 +463,60 @@ def train():
     x = all_stocks_df[cols_x]
     y = all_stocks_df["Y"]
 
-    # all_stocks_df = all_stocks_df.to_csv('kaggle_Rapp_Katja.csv', index=False)
+    return x, y
 
+def gridSearch(x, y):
+    tuned_parameters = [{'kernel': ['rbf'], 'gamma': [1e-3, 1e-4],
+                     'C': [1, 10, 100, 1000]},
+                    {'kernel': ['linear'], 'C': [1, 10, 100, 1000]}]
+
+    scores = ['precision', 'recall']
+
+    X_train, X_test, y_train, y_test = train_test_split(x, y, train_size=0.5, test_size=0.5, random_state=42)
+
+    for score in scores:
+        print("# Tuning hyper-parameters for %s" % score)
+        print()
+
+        clf = GridSearchCV(svm.SVC(), tuned_parameters, cv=5, n_jobs=-1, scoring='%s_macro' % score)
+        clf.fit(X_train, y_train)
+
+        print("Best parameters set found on development set:")
+        print()
+        print(clf.best_params_)
+        print()
+        print("Grid scores on development set:")
+        print()
+        means = clf.cv_results_['mean_test_score']
+        stds = clf.cv_results_['std_test_score']
+        for mean, std, params in zip(means, stds, clf.cv_results_['params']):
+            print("%0.3f (+/-%0.03f) for %r"
+                % (mean, std * 2, params))
+        print()
+
+        print("Detailed classification report:")
+        print()
+        print("The model is trained on the full development set.")
+        print("The scores are computed on the full evaluation set.")
+        print()
+        y_true, y_pred = y_test, clf.predict(X_test)
+        print(classification_report(y_true, y_pred))
+        print()
+
+def train(x, y):
     x_train, x_test, y_train, y_test = train_test_split(x, y, train_size=0.7, test_size=0.3, random_state=42)
 
     # Train Classifier
-    print("Starting Training of KNeighborsClassifier")
+    print("Starting Training of SVM")
     print()
     # classifier = RandomForestClassifier(n_estimators=100, random_state=42)
-    classifier = KNeighborsClassifier(n_neighbors=5)
+    # classifier = KNeighborsClassifier(n_neighbors=5)
+    classifier = svm.SVC(kernel= 'rbf', gamma='0.001', C=100.0, max_iter=-1)
 
     classifier.fit(x_train, y_train)
 
     rf_score = classifier.score(x_test, y_test)
-    print("KNeighborsClassifier Score: " + ": " + str(rf_score))
+    print("SVM Score: " + ": " + str(rf_score))
 
     return classifier
 
@@ -548,14 +593,17 @@ def main():
     print()
 
     start_time = time.time()
-    rf_class = train()
+    x,y = prepareTrainingData()
+    classifier = train(x, y)
     end_time = time.time()
     elapsed_time = end_time -  start_time
     print()
     print('Trainingsdauer: ' + "{0:.2f}".format(elapsed_time) + ' s', end='\n')
     print()
 
-    result_str_lst = classify_2018(rf_class)
+    # gridSearch(x, y)
+
+    result_str_lst = classify_2018(classifier)
 
     # Transfer list to DataFrame and save
     kaggle = pd.DataFrame(data=result_str_lst, columns=['Id', 'Category'])
