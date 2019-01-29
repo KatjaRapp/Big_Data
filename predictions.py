@@ -397,8 +397,8 @@ def getAllTickerTimeseries_GT_Df_serial(ticker_file_names, df_train_label):
     file_ctr = 0
     num_files = len(ticker_file_names)
 
-    # num_samples = 50
-    # ticker_file_names = [ticker_file_names[i] for i in np.random.randint(0, len(ticker_file_names), num_samples)]
+    num_samples = 10
+    ticker_file_names = [ticker_file_names[i] for i in np.random.randint(0, len(ticker_file_names), num_samples)]
 
     for file_name in ticker_file_names:
 
@@ -511,7 +511,7 @@ def train(x, y):
     print()
     # classifier = RandomForestClassifier(n_estimators=100, random_state=42)
     # classifier = KNeighborsClassifier(n_neighbors=5)
-    classifier = svm.SVC(kernel= 'rbf', gamma='0.001', C=100.0, max_iter=-1)
+    classifier = svm.SVC(kernel= 'rbf', gamma=0.001, C=100.0, max_iter=-1)
 
     classifier.fit(x_train, y_train)
 
